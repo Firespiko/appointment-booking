@@ -14,24 +14,39 @@ export async function api<T>(
     url: string,
     options?: RequestInit,
 ): Promise<T> {
-    const response = await fetch(url, {
-        ...options,
-        credentials: "include",
-        headers: {
-            "Content-Type": "application/json",
-            ...options?.headers,
-        },
-    });
+    const headers = new Headers(options?.headers);
 
-    const data = await response.json().catch(() => null);
-
-    if (!response.ok) {
-        throw new ApiError(
-            data?.error?.message ?? "Something went wrong.",
-            response.status,
-            data?.error?.code,
-        );
+    if (options?.body) {
+        headers.set("Content-Type", "application/json");
     }
 
-    return data;
+    const controller = new AbortController();
+
+    const timeout = window.setTimeout(() => {
+        controller.abort();
+    }, 8000);
+
+    try {
+        const response = await fetch(url, {
+            ...options,
+            credentials: "same-origin",
+            cache: "no-store",
+            signal: controller.signal,
+            headers,
+        });
+
+        const data = await response.json().catch(() => null);
+
+        if (!response.ok) {
+            throw new ApiError(
+                data?.error?.message ?? "Something went wrong.",
+                response.status,
+                data?.error?.code,
+            );
+        }
+
+        return data;
+    } finally {
+        window.clearTimeout(timeout);
+    }
 }

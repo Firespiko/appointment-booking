@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+
 import AppointmentDashboard from "@/src/features/appointments/components/AppointmentDashboard";
 import AdminSlotManager from "@/src/features/slots/components/AdminSlotManager";
-
 import { api } from "@/src/lib/api";
 
 type User = {
@@ -12,20 +12,49 @@ type User = {
   role: "USER" | "ADMIN";
 };
 
+type ActivePanel = "booking" | "appointments" | "manage";
+
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [checkingSession, setCheckingSession] = useState(true);
   const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [activePanel, setActivePanel] =
+    useState<ActivePanel>("booking");
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
-    api<{ user: User }>("/api/auth/me")
-      .then((data) => setUser(data.user))
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+
+    async function checkSession() {
+      try {
+        const data = await api<{ user: User }>(
+          "/api/auth/me",
+        );
+
+        if (!cancelled) {
+          setUser(data.user);
+        }
+      } catch {
+        if (!cancelled) {
+          setUser(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setCheckingSession(false);
+        }
+      }
+    }
+
+    void checkSession();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function handleAuth(event: React.FormEvent) {
@@ -45,13 +74,14 @@ export default function Home() {
       );
 
       setUser(data.user);
+      setActivePanel("booking");
       setEmail("");
       setPassword("");
     } catch (err) {
       setError(
         err instanceof Error
           ? err.message
-          : "Authentication failed.",
+          : "Authentication failed. Please try again.",
       );
     } finally {
       setSubmitting(false);
@@ -59,45 +89,76 @@ export default function Home() {
   }
 
   async function handleLogout() {
-    await api("/api/auth/logout", { method: "POST" });
-    setUser(null);
-  }
+    setLoggingOut(true);
+    setError("");
 
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-sm text-black">
-          Loading...
-        </div>
-      </main>
-    );
+    try {
+      await api("/api/auth/logout", {
+        method: "POST",
+      });
+
+      setUser(null);
+      setActivePanel("booking");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to sign out. Please try again.",
+      );
+    } finally {
+      setLoggingOut(false);
+    }
   }
 
   if (!user) {
-    return (
-      <main className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
-        <div className="w-full max-w-md">
-          <div className="mb-8 text-center">
-            <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-              Appointly
-            </h1>
+    const isLogin = authMode === "login";
 
-            <p className="mt-2 text-black">
+    return (
+      <main className="auth-page">
+        <div className="auth-shell">
+          <div className="auth-brand">
+            <div className="auth-logo" aria-hidden="true">
+              A
+            </div>
+
+            <h1 className="auth-title">Appointer</h1>
+
+            <p className="auth-subtitle">
               Book your next appointment in seconds.
             </p>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-6 flex rounded-lg bg-slate-100 p-1">
+          <section
+            className="auth-card"
+            aria-labelledby="auth-heading"
+          >
+            <div className="auth-card-header">
+              <h2 id="auth-heading">
+                {isLogin ? "Welcome back" : "Create your account"}
+              </h2>
+
+              <p>
+                {isLogin
+                  ? "Sign in to manage your appointments."
+                  : "Get started with appointment booking."}
+              </p>
+            </div>
+
+            <div
+              className="auth-tabs"
+              role="tablist"
+              aria-label="Authentication options"
+            >
               <button
                 type="button"
+                role="tab"
+                aria-selected={isLogin}
                 onClick={() => {
                   setAuthMode("login");
                   setError("");
                 }}
-                className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition ${authMode === "login"
-                  ? "bg-white text-black shadow-sm"
-                  : "text-black"
+                disabled={submitting}
+                className={`auth-tab ${isLogin ? "auth-tab-active" : ""
                   }`}
               >
                 Sign in
@@ -105,85 +166,138 @@ export default function Home() {
 
               <button
                 type="button"
+                role="tab"
+                aria-selected={!isLogin}
                 onClick={() => {
                   setAuthMode("register");
                   setError("");
                 }}
-                className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition ${authMode === "register"
-                  ? "bg-white text-black shadow-sm"
-                  : "text-black"
+                disabled={submitting}
+                className={`auth-tab ${!isLogin ? "auth-tab-active" : ""
                   }`}
               >
                 Create account
               </button>
             </div>
 
-            <form onSubmit={handleAuth} className="space-y-4">
-              <div>
-                <label
-                  htmlFor="email"
-                  className="mb-1.5 block text-sm font-medium text-black"
-                >
-                  Email
-                </label>
+            <form onSubmit={handleAuth} className="auth-form">
+              <div className="auth-field">
+                <label htmlFor="email">Email address</label>
 
                 <input
                   id="email"
+                  name="email"
                   type="email"
+                  inputMode="email"
+                  autoComplete="email"
                   required
                   value={email}
-                  onChange={(event) => setEmail(event.target.value)}
+                  onChange={(event) => {
+                    setEmail(event.target.value);
+                    if (error) setError("");
+                  }}
                   placeholder="you@example.com"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-black placeholder:text-black outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                  disabled={submitting}
                 />
               </div>
 
-              <div>
-                <label
-                  htmlFor="password"
-                  className="mb-1.5 block text-sm font-medium text-black"
-                >
-                  Password
-                </label>
+              <div className="auth-field">
+                <label htmlFor="password">Password</label>
 
                 <input
                   id="password"
+                  name="password"
                   type="password"
+                  autoComplete={
+                    isLogin
+                      ? "current-password"
+                      : "new-password"
+                  }
                   required
                   minLength={8}
                   value={password}
-                  onChange={(event) => setPassword(event.target.value)}
+                  onChange={(event) => {
+                    setPassword(event.target.value);
+                    if (error) setError("");
+                  }}
                   placeholder="At least 8 characters"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-black placeholder:text-black outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-200"
+                  disabled={submitting}
                 />
+
+                {!isLogin && (
+                  <p className="auth-helper">
+                    Use at least 8 characters.
+                  </p>
+                )}
               </div>
 
               {error && (
-                <div
-                  role="alert"
-                  className="rounded-lg bg-red-50 px-3 py-2.5 text-sm text-red-700"
-                >
-                  {error}
+                <div role="alert" className="auth-error">
+                  <span
+                    className="auth-error-icon"
+                    aria-hidden="true"
+                  >
+                    !
+                  </span>
+
+                  <p>{error}</p>
                 </div>
               )}
 
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                className="auth-submit"
               >
-                {submitting
-                  ? "Please wait..."
-                  : authMode === "login"
-                    ? "Sign in"
-                    : "Create account"}
+                {submitting && (
+                  <span
+                    className="auth-spinner"
+                    aria-hidden="true"
+                  />
+                )}
+
+                <span>
+                  {submitting
+                    ? isLogin
+                      ? "Signing in..."
+                      : "Creating account..."
+                    : isLogin
+                      ? "Sign in"
+                      : "Create account"}
+                </span>
               </button>
             </form>
-          </div>
+          </section>
+
+          <p className="auth-footer">
+            Simple, secure appointment booking.
+          </p>
         </div>
       </main>
     );
   }
+
+  const tabs: {
+    id: ActivePanel;
+    label: string;
+  }[] = [
+      {
+        id: "booking",
+        label: "Book appointment",
+      },
+      {
+        id: "appointments",
+        label: "My appointments",
+      },
+      ...(user.role === "ADMIN"
+        ? [
+          {
+            id: "manage" as const,
+            label: "Manage slots",
+          },
+        ]
+        : []),
+    ];
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -191,7 +305,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
           <div>
             <h1 className="text-xl font-bold text-slate-900">
-              Appointly
+              Appointer
             </h1>
 
             <p className="text-xs text-black">
@@ -206,10 +320,18 @@ export default function Home() {
 
             <button
               type="button"
-              onClick={handleLogout}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-black hover:bg-slate-50"
+              onClick={() => void handleLogout()}
+              disabled={loggingOut}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-black transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Sign out
+              {loggingOut && (
+                <span
+                  className="h-4 w-4 animate-spin rounded-full border-2 border-slate-400 border-t-slate-800"
+                  aria-hidden="true"
+                />
+              )}
+
+              {loggingOut ? "Signing out..." : "Sign out"}
             </button>
           </div>
         </div>
@@ -224,10 +346,60 @@ export default function Home() {
           Choose an available time to book your appointment.
         </p>
 
-        <div className="mt-8 space-y-8">
-          {user.role === "ADMIN" && <AdminSlotManager />}
+        <nav
+          className="mt-8 -mx-1 overflow-x-auto px-1 pb-1 scrollbar-none"
+          aria-label="Appointment navigation"
+        >
+          <div
+            className="flex w-max min-w-full rounded-xl border border-slate-200 bg-white p-1 shadow-sm sm:w-full"
+            role="tablist"
+          >
+            {tabs.map((tab) => {
+              const active = activePanel === tab.id;
 
-          <AppointmentDashboard userRole={user.role} />
+              return (
+                <button
+                  key={tab.id}
+                  id={`tab-${tab.id}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  aria-controls={`panel-${tab.id}`}
+                  tabIndex={active ? 0 : -1}
+                  onClick={() => setActivePanel(tab.id)}
+                  className={`min-w-[150px] rounded-lg px-4 py-2.5 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-1 sm:min-w-0 sm:flex-1 ${active
+                      ? "bg-slate-900 text-white shadow-sm"
+                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+
+        <div
+          key={activePanel}
+          id={`panel-${activePanel}`}
+          role="tabpanel"
+          aria-labelledby={`tab-${activePanel}`}
+          tabIndex={0}
+          className="mt-8 animate-panel-in focus:outline-none"
+        >
+          {activePanel === "manage" &&
+            user.role === "ADMIN" ? (
+            <AdminSlotManager />
+          ) : (
+            <AppointmentDashboard
+              userRole={user.role}
+              view={
+                activePanel === "booking"
+                  ? "booking"
+                  : "appointments"
+              }
+            />
+          )}
         </div>
       </div>
     </main>

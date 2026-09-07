@@ -8,7 +8,7 @@ A small, production-ready appointment booking application built with Next.js, Ty
 
 ## Overview
 
-Appointly is a focused appointment booking application with two roles:
+Appointer is a focused appointment booking application with two roles:
 
 - **Users** can browse available appointment slots, book appointments, view their appointment history, and cancel upcoming appointments.
 - **Administrators** can create appointment slots that become available for users to book.

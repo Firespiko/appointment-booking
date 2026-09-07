@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, asc, eq, gt, isNull } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/src/db/client";
 import {
@@ -129,25 +129,26 @@ export async function POST(request: Request) {
             );
         }
 
-        const [existingSlot] = await db
+        const [overlappingSlot] = await db
             .select({
                 id: appointmentSlots.id,
             })
             .from(appointmentSlots)
             .where(
                 and(
-                    eq(appointmentSlots.startTime, start),
-                    eq(appointmentSlots.endTime, end),
+                    sql`${appointmentSlots.startTime} < ${end}`,
+                    sql`${appointmentSlots.endTime} > ${start}`,
                 ),
             )
             .limit(1);
 
-        if (existingSlot) {
+        if (overlappingSlot) {
             return NextResponse.json(
                 {
                     error: {
-                        code: "SLOT_ALREADY_EXISTS",
-                        message: "An appointment slot already exists at this time.",
+                        code: "SLOT_TIME_CONFLICT",
+                        message:
+                            "This time overlaps with an existing appointment slot.",
                     },
                 },
                 { status: 409 },
