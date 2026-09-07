@@ -84,22 +84,19 @@ export async function POST(request: Request) {
                 },
                 { status: 201 },
             );
-        } catch (error: unknown) {
-            const postgresError = error as {
-                code?: string;
-                constraint?: string;
-            };
-
+        } catch (error) {
             if (
-                postgresError.code === "23505" &&
-                postgresError.constraint ===
-                "appointments_one_active_booking_per_slot"
+                error &&
+                typeof error === "object" &&
+                "code" in error &&
+                error.code === "23505"
             ) {
                 return NextResponse.json(
                     {
                         error: {
                             code: "SLOT_ALREADY_BOOKED",
-                            message: "This appointment slot is no longer available.",
+                            message:
+                                "This slot is no longer available. Someone else booked it just before you.",
                         },
                     },
                     { status: 409 },

@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-import { api } from "@/src/lib/api";
+import { api, ApiError } from "@/src/lib/api";
 
 type Slot = {
     id: string;
@@ -109,6 +108,35 @@ export default function AppointmentDashboard() {
         };
     }, []);
 
+    useEffect(() => {
+        const refreshSlots = () => {
+            void loadData();
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === "visible") {
+                refreshSlots();
+            }
+        };
+
+        const interval = window.setInterval(() => {
+            refreshSlots();
+        }, 20_000);
+
+        document.addEventListener(
+            "visibilitychange",
+            handleVisibilityChange,
+        );
+
+        return () => {
+            window.clearInterval(interval);
+            document.removeEventListener(
+                "visibilitychange",
+                handleVisibilityChange,
+            );
+        };
+    }, []);
+
     async function bookSlot(slotId: string) {
         setBookingId(slotId);
         setSuccess("");
@@ -122,11 +150,25 @@ export default function AppointmentDashboard() {
 
             setSuccess("Your appointment has been booked successfully.");
             await loadData();
-        } catch (err) {
+        } catch (error) {
+            if (
+                error instanceof ApiError &&
+                error.code === "SLOT_ALREADY_BOOKED"
+            ) {
+                setError(
+                    "This slot is no longer available. Someone else booked it just before you. Please choose another time.",
+                );
+
+                // Immediately refresh availability.
+                await loadData();
+
+                return;
+            }
+
             setError(
-                err instanceof Error
-                    ? err.message
-                    : "Unable to book this appointment.",
+                error instanceof Error
+                    ? error.message
+                    : "Unable to book appointment.",
             );
         } finally {
             setBookingId(null);
