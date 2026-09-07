@@ -129,6 +129,31 @@ export async function POST(request: Request) {
             );
         }
 
+        const [existingSlot] = await db
+            .select({
+                id: appointmentSlots.id,
+            })
+            .from(appointmentSlots)
+            .where(
+                and(
+                    eq(appointmentSlots.startTime, start),
+                    eq(appointmentSlots.endTime, end),
+                ),
+            )
+            .limit(1);
+
+        if (existingSlot) {
+            return NextResponse.json(
+                {
+                    error: {
+                        code: "SLOT_ALREADY_EXISTS",
+                        message: "An appointment slot already exists at this time.",
+                    },
+                },
+                { status: 409 },
+            );
+        }
+
         const [slot] = await db
             .insert(appointmentSlots)
             .values({

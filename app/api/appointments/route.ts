@@ -25,6 +25,18 @@ export async function POST(request: Request) {
             );
         }
 
+        if (user.role !== "USER") {
+            return NextResponse.json(
+                {
+                    error: {
+                        code: "FORBIDDEN",
+                        message: "Only users can book appointments.",
+                    },
+                },
+                { status: 403 },
+            );
+        }
+
         const body = await request.json();
 
         const result = createAppointmentSchema.safeParse(body);
@@ -85,12 +97,16 @@ export async function POST(request: Request) {
                 { status: 201 },
             );
         } catch (error) {
-            if (
-                error &&
-                typeof error === "object" &&
-                "code" in error &&
-                error.code === "23505"
-            ) {
+            const dbError = error as {
+                code?: string;
+                cause?: {
+                    code?: string;
+                };
+            };
+
+            const errorCode = dbError.code ?? dbError.cause?.code;
+
+            if (errorCode === "23505") {
                 return NextResponse.json(
                     {
                         error: {

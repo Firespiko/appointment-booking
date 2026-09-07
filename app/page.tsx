@@ -227,7 +227,7 @@ export default function Home() {
         <div className="mt-8 space-y-8">
           {user.role === "ADMIN" && <AdminSlotManager />}
 
-          <AppointmentDashboard />
+          <AppointmentDashboard userRole={user.role} />
         </div>
       </div>
     </main>

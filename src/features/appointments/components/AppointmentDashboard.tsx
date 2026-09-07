@@ -1,5 +1,8 @@
+// src/features/appointments/components/AppointmentDashboard.tsx
+
 "use client";
 
+import Toast from "@/src/components/ui/Toast";
 import { useEffect, useState } from "react";
 import { api, ApiError } from "@/src/lib/api";
 
@@ -37,7 +40,13 @@ function formatTime(date: string) {
     }).format(new Date(date));
 }
 
-export default function AppointmentDashboard() {
+type AppointmentDashboardProps = {
+    userRole: "USER" | "ADMIN";
+};
+
+export default function AppointmentDashboard({
+    userRole,
+}: AppointmentDashboardProps) {
     const [slots, setSlots] = useState<Slot[]>([]);
     const [appointments, setAppointments] = useState<Appointment[]>([]);
     const [loading, setLoading] = useState(true);
@@ -45,12 +54,14 @@ export default function AppointmentDashboard() {
     const [bookingId, setBookingId] = useState<string | null>(null);
     const [cancellingId, setCancellingId] = useState<string | null>(null);
 
-    const [success, setSuccess] = useState("");
-    const [error, setError] = useState("");
+    const [toast, setToast] = useState<{
+        type: "success" | "error";
+        title: string;
+        message: string;
+    } | null>(null);
+    const [cancelModal, setCancelModal] = useState<Appointment | null>(null);
 
     async function loadData() {
-        setError("");
-
         try {
             const [slotData, appointmentData] = await Promise.all([
                 api<{ slots: Slot[] }>("/api/slots"),
@@ -60,11 +71,14 @@ export default function AppointmentDashboard() {
             setSlots(slotData.slots);
             setAppointments(appointmentData.appointments);
         } catch (err) {
-            setError(
-                err instanceof Error
-                    ? err.message
-                    : "Unable to load your appointments.",
-            );
+            setToast({
+                type: "error",
+                title: "Unable to load appointments",
+                message:
+                    err instanceof Error
+                        ? err.message
+                        : "Please refresh the page and try again.",
+            });
         } finally {
             setLoading(false);
         }
@@ -74,12 +88,12 @@ export default function AppointmentDashboard() {
         let cancelled = false;
 
         async function fetchAppointments() {
-            setError("");
-
             try {
                 const [slotData, appointmentData] = await Promise.all([
                     api<{ slots: Slot[] }>("/api/slots"),
-                    api<{ appointments: Appointment[] }>("/api/appointments"),
+                    api<{ appointments: Appointment[] }>(
+                        "/api/appointments",
+                    ),
                 ]);
 
                 if (cancelled) return;
@@ -89,11 +103,14 @@ export default function AppointmentDashboard() {
             } catch (err) {
                 if (cancelled) return;
 
-                setError(
-                    err instanceof Error
-                        ? err.message
-                        : "Unable to load your appointments.",
-                );
+                setToast({
+                    type: "error",
+                    title: "Unable to load appointments",
+                    message:
+                        err instanceof Error
+                            ? err.message
+                            : "Please refresh the page and try again.",
+                });
             } finally {
                 if (!cancelled) {
                     setLoading(false);
@@ -119,9 +136,7 @@ export default function AppointmentDashboard() {
             }
         };
 
-        const interval = window.setInterval(() => {
-            refreshSlots();
-        }, 20_000);
+        const interval = window.setInterval(refreshSlots, 20_000);
 
         document.addEventListener(
             "visibilitychange",
@@ -139,8 +154,6 @@ export default function AppointmentDashboard() {
 
     async function bookSlot(slotId: string) {
         setBookingId(slotId);
-        setSuccess("");
-        setError("");
 
         try {
             await api("/api/appointments", {
@@ -148,61 +161,77 @@ export default function AppointmentDashboard() {
                 body: JSON.stringify({ slotId }),
             });
 
-            setSuccess("Your appointment has been booked successfully.");
+            setToast({
+                type: "success",
+                title: "Appointment booked!",
+                message:
+                    "Your appointment has been added to your upcoming appointments.",
+            });
+
             await loadData();
         } catch (error) {
             if (
                 error instanceof ApiError &&
                 error.code === "SLOT_ALREADY_BOOKED"
             ) {
-                setError(
-                    "This slot is no longer available. Someone else booked it just before you. Please choose another time.",
-                );
+                setToast({
+                    type: "error",
+                    title: "Slot no longer available",
+                    message:
+                        "Someone else booked this appointment just before you. Please choose another time.",
+                });
 
-                // Immediately refresh availability.
                 await loadData();
 
                 return;
             }
 
-            setError(
-                error instanceof Error
-                    ? error.message
-                    : "Unable to book appointment.",
-            );
+            setToast({
+                type: "error",
+                title: "Booking failed",
+                message:
+                    error instanceof Error
+                        ? error.message
+                        : "Unable to book appointment. Please try again.",
+            });
         } finally {
             setBookingId(null);
         }
     }
 
-    async function cancelAppointment(appointment: Appointment) {
-        const confirmed = window.confirm(
-            `Cancel your appointment on ${formatDate(
-                appointment.slot.startTime,
-            )} at ${formatTime(appointment.slot.startTime)}?`,
-        );
-
-        if (!confirmed) {
+    async function cancelAppointment() {
+        if (!cancelModal) {
             return;
         }
 
+        const appointment = cancelModal;
+
         setCancellingId(appointment.id);
-        setSuccess("");
-        setError("");
 
         try {
             await api(`/api/appointments/${appointment.id}/cancel`, {
                 method: "PATCH",
             });
 
-            setSuccess("Your appointment has been cancelled.");
+            setCancelModal(null);
+
+            setToast({
+                type: "success",
+                title: "Appointment cancelled",
+                message:
+                    "The appointment has been removed from your upcoming schedule.",
+            });
+
             await loadData();
         } catch (err) {
-            setError(
-                err instanceof Error
-                    ? err.message
-                    : "Unable to cancel this appointment.",
-            );
+            setToast({
+                type: "error",
+                title: "Cancellation failed",
+                message:
+                    err instanceof Error
+                        ? err.message
+                        : "Unable to cancel this appointment. Please try again.",
+            });
         } finally {
             setCancellingId(null);
         }
@@ -224,6 +253,7 @@ export default function AppointmentDashboard() {
         return (
             <div className="space-y-6">
                 <div className="h-7 w-48 animate-pulse rounded bg-slate-200" />
+
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     <div className="h-44 animate-pulse rounded-xl bg-slate-200" />
                     <div className="h-44 animate-pulse rounded-xl bg-slate-200" />
@@ -235,43 +265,91 @@ export default function AppointmentDashboard() {
 
     return (
         <div className="space-y-12">
-            {/* Feedback */}
-            {success && (
-                <div
-                    role="status"
-                    className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3"
-                >
-                    <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-xs font-bold text-white">
-                        ✓
-                    </div>
-
-                    <div>
-                        <p className="text-sm font-semibold text-emerald-900">
-                            Success
-                        </p>
-                        <p className="text-sm text-emerald-700">
-                            {success}
-                        </p>
-                    </div>
+            {toast && (
+                <div className="toast-container">
+                    <Toast
+                        type={toast.type}
+                        title={toast.title}
+                        message={toast.message}
+                        onClose={() => setToast(null)}
+                    />
                 </div>
             )}
 
-            {error && (
+            {cancelModal && (
                 <div
-                    role="alert"
-                    className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3"
+                    className="cancel-modal-overlay"
+                    role="presentation"
+                    onMouseDown={(event) => {
+                        if (event.target === event.currentTarget) {
+                            setCancelModal(null);
+                        }
+                    }}
                 >
-                    <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white">
-                        !
-                    </div>
+                    <div
+                        className="cancel-modal"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="cancel-modal-title"
+                    >
+                        <button
+                            type="button"
+                            onClick={() => setCancelModal(null)}
+                            className="cancel-modal-close"
+                            aria-label="Close cancellation dialog"
+                        >
+                            ×
+                        </button>
 
-                    <div>
-                        <p className="text-sm font-semibold text-red-900">
-                            Something went wrong
+                        <div className="cancel-modal-icon" aria-hidden="true">
+                            !
+                        </div>
+
+                        <h2 id="cancel-modal-title">
+                            Cancel appointment?
+                        </h2>
+
+                        <p className="cancel-modal-date">
+                            {formatDate(cancelModal.slot.startTime)}
                         </p>
-                        <p className="text-sm text-red-700">
-                            {error}
+
+                        <p className="cancel-modal-time">
+                            {formatTime(cancelModal.slot.startTime)} –{" "}
+                            {formatTime(cancelModal.slot.endTime)}
                         </p>
+
+                        <p className="cancel-modal-description">
+                            Are you sure you want to cancel this appointment?
+                        </p>
+
+                        <div className="cancel-modal-actions">
+                            <button
+                                type="button"
+                                onClick={() => setCancelModal(null)}
+                                disabled={cancellingId !== null}
+                                className="cancel-modal-secondary"
+                            >
+                                Keep appointment
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => void cancelAppointment()}
+                                disabled={cancellingId !== null}
+                                className="cancel-modal-danger"
+                            >
+                                {cancellingId === cancelModal.id && (
+                                    <span
+                                        className="cancel-modal-spinner"
+                                        aria-hidden="true"
+                                    />
+                                )}
+
+                                {cancellingId === cancelModal.id
+                                    ? "Cancelling..."
+                                    : "Cancel appointment"}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -330,16 +408,25 @@ export default function AppointmentDashboard() {
                                     </span>
                                 </div>
 
-                                <button
-                                    type="button"
-                                    onClick={() => bookSlot(slot.id)}
-                                    disabled={bookingId !== null}
-                                    className="mt-6 w-full rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    {bookingId === slot.id
-                                        ? "Booking..."
-                                        : "Book appointment"}
-                                </button>
+                                {userRole === "USER" && (
+                                    <button
+                                        type="button"
+                                        onClick={() => bookSlot(slot.id)}
+                                        disabled={bookingId !== null}
+                                        className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        {bookingId === slot.id && (
+                                            <span
+                                                className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
+                                                aria-hidden="true"
+                                            />
+                                        )}
+
+                                        {bookingId === slot.id
+                                            ? "Booking..."
+                                            : "Book appointment"}
+                                    </button>
+                                )}
                             </div>
                         ))}
                     </div>
@@ -385,12 +472,19 @@ export default function AppointmentDashboard() {
 
                                         <div>
                                             <p className="font-semibold text-black">
-                                                {formatDate(appointment.slot.startTime)}
+                                                {formatDate(
+                                                    appointment.slot.startTime,
+                                                )}
                                             </p>
 
                                             <p className="mt-1 text-sm text-black">
-                                                {formatTime(appointment.slot.startTime)} –{" "}
-                                                {formatTime(appointment.slot.endTime)}
+                                                {formatTime(
+                                                    appointment.slot.startTime,
+                                                )}{" "}
+                                                –{" "}
+                                                {formatTime(
+                                                    appointment.slot.endTime,
+                                                )}
                                             </p>
 
                                             <span className="mt-2 inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
@@ -401,10 +495,17 @@ export default function AppointmentDashboard() {
 
                                     <button
                                         type="button"
-                                        onClick={() => cancelAppointment(appointment)}
+                                        onClick={() => setCancelModal(appointment)}
                                         disabled={cancellingId !== null}
-                                        className="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-black transition hover:border-red-300 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                        className="flex items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-black transition hover:border-red-300 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
                                     >
+                                        {cancellingId === appointment.id && (
+                                            <span
+                                                className="h-4 w-4 animate-spin rounded-full border-2 border-red-300 border-t-red-600"
+                                                aria-hidden="true"
+                                            />
+                                        )}
+
                                         {cancellingId === appointment.id
                                             ? "Cancelling..."
                                             : "Cancel appointment"}
@@ -448,12 +549,19 @@ export default function AppointmentDashboard() {
                                     <div className="flex items-center justify-between gap-4">
                                         <div>
                                             <p className="font-medium text-black">
-                                                {formatDate(appointment.slot.startTime)}
+                                                {formatDate(
+                                                    appointment.slot.startTime,
+                                                )}
                                             </p>
 
                                             <p className="mt-1 text-sm text-black">
-                                                {formatTime(appointment.slot.startTime)} –{" "}
-                                                {formatTime(appointment.slot.endTime)}
+                                                {formatTime(
+                                                    appointment.slot.startTime,
+                                                )}{" "}
+                                                –{" "}
+                                                {formatTime(
+                                                    appointment.slot.endTime,
+                                                )}
                                             </p>
                                         </div>
 
@@ -463,7 +571,9 @@ export default function AppointmentDashboard() {
                                                 : "bg-emerald-50 text-emerald-700"
                                                 }`}
                                         >
-                                            {cancelled ? "Cancelled" : "Completed"}
+                                            {cancelled
+                                                ? "Cancelled"
+                                                : "Completed"}
                                         </span>
                                     </div>
                                 </div>
