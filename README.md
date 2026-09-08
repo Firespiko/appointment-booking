@@ -188,7 +188,7 @@ The project intentionally avoids unnecessary services such as Redis, WebSockets,
 Clone the repository and install dependencies:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/Firespiko/appointment-booking
 cd appointment-booking
 pnpm install
 ````

@@ -9,7 +9,7 @@ Appointly uses four core entities:
 - `appointment_slots`
 - `appointments`
 
-![Appointly ERD](../public/erd.png)
+![Appointly ERD](../public/erd_diagram.png)
 
 ## Relationships
 
