@@ -1,7 +1,6 @@
-## 1. Overview
-
-
 # Appointly
+
+## 1. Overview
 
 A full-stack appointment booking application built with Next.js, React, TypeScript, Drizzle ORM, and PostgreSQL.
 
@@ -102,7 +101,7 @@ Next.js
 
 Authentication, authorization, validation, and business rules are enforced on the server.
 
-See [Architecture Documentation](architecture.md) for detailed diagrams and implementation details.
+See [Architecture Documentation](./docs/architecture.md) for detailed diagrams and implementation details.
 
 ## 6. Database
 
