@@ -1,612 +1,330 @@
-# Appointer
+## 1. Overview
 
-A small, production-ready appointment booking application built with Next.js, TypeScript, PostgreSQL, and Drizzle ORM.
 
-**Live Demo:** https://appointly-ochre.vercel.app/
+# Appointly
 
----
+A full-stack appointment booking application built with Next.js, React, TypeScript, Drizzle ORM, and PostgreSQL.
 
-## Overview
+Appointly allows users to book and cancel appointments, while admins create and manage available appointment slots.
 
-Appointer is a focused appointment booking application with two roles:
+Link: https://appointly-ochre.vercel.app/
 
-- **Users** can browse available appointment slots, book appointments, view their appointment history, and cancel upcoming appointments.
-- **Administrators** can create appointment slots that become available for users to book.
+## 2. Features
 
-The project intentionally keeps the product scope small while focusing on the areas that matter most for a reliable booking system:
-
-- Correctness
-- Database consistency
-- Authentication and authorization
-- Server-side validation
-- Concurrent booking protection
-- Clear UX feedback
-- Automated testing
-- Production deployment
-
-> **Product philosophy:** small scope, deep quality.
-
----
 
 ## Features
 
-### Users
+- Session-based authentication
+- Role-based access control
+- Admin slot creation and management
+- 15, 30, 45, and 60 minute slots
+- Slot overlap prevention
+- Appointment booking and cancellation
+- Concurrent booking protection
+- Appointment history
+- Responsive and accessible UI
+- Loading, error, and success feedback
 
-- Create an account
-- Sign in and sign out
-- View available appointment slots
-- Book an appointment
-- View upcoming appointments
-- View past and cancelled appointments
-- Cancel upcoming appointments
-- Receive clear loading, success, and error feedback
+## 3. Screenshots
 
-### Administrators
+## Screenshots
 
-- Sign in with administrator privileges
-- Create future appointment slots
-- Make newly-created slots available to users
+### Admin Login
 
-### Reliability
+![Admin login](./public/admin-login.png)
 
-- Database-level protection against double booking
-- Server-side input validation
-- Role-based authorization
-- Appointment ownership checks
-- Soft cancellation preserving appointment history
-- Explicit API error responses
-- Automated unit and integration tests
+### Admin Slot Management
 
----
+![Admin slot management](./public/admin-manage-slots.png)
+
+### Admin Slot Creation
+
+![Admin slot creation](./public/admin-slot-created.png)
+
+### Admin Booking View
+
+![Admin booking view](./public/admin-book-appointment.png)
+
+### User Booking
+
+![User appointment booking](./public/user-appointment-book.png)
+
+### Appointment Booked
+
+![Appointment booked successfully](./public/user-appointment-booked.png)
+
+### Upcoming and Past Appointments
+
+![User appointments](./public/user-appointments.png)
+
+### Appointment Cancellation
+
+![Cancel appointment confirmation](./public/user-cancel-appointment.png)
+
+### Appointment Cancelled
+
+![Appointment cancelled](./public/user-appointment-cancelled.png)
+
+### Login Error
+
+![Login error](./public/login-error.png)
+
+## 4. Tech Stack
 
 ## Tech Stack
 
-| Area | Technology |
+| Layer | Technology |
 |---|---|
-| Framework | Next.js |
-| Frontend | React + TypeScript |
+| Frontend | Next.js, React, TypeScript |
 | Styling | Tailwind CSS |
 | Backend | Next.js Route Handlers |
-| Database | PostgreSQL |
-| Database hosting | Neon |
-| ORM | Drizzle ORM |
 | Validation | Zod |
-| Password hashing | bcrypt |
+| ORM | Drizzle ORM |
+| Database | PostgreSQL / Neon |
 | Testing | Vitest |
 | Deployment | Vercel |
-| Package manager | pnpm |
 
----
+## 5. Architecture
 
 ## Architecture
 
-The application uses a **modular monolith** architecture.
+Appointly uses a simple full-stack architecture:
 
+Browser
+   ↓
+Next.js
+   ├── React UI
+   └── API Route Handlers
+          ↓
+      Drizzle ORM
+          ↓
+    PostgreSQL / Neon
+
+Authentication, authorization, validation, and business rules are enforced on the server.
+
+See [Architecture Documentation](architecture.md) for detailed diagrams and implementation details.
+
+## 6. Database
+
+## Database
+
+Appointly uses PostgreSQL hosted on Neon with Drizzle ORM.
+
+Core entities:
+
+- `users`
+- `sessions`
+- `appointment_slots`
+- `appointments`
+
+The database enforces foreign keys, valid slot time ranges, unique user emails, and one active booking per slot.
+
+See [ERD Documentation](./docs/erd.md).
+
+## 7. Authentication & Authorization
+
+## Authentication & Authorization
+
+Authentication uses server-side sessions stored in PostgreSQL.
+
+Two roles are supported:
+
+- **USER** — book, view, and cancel their own appointments.
+- **ADMIN** — create and manage their own appointment slots.
+
+Authorization and ownership checks are enforced server-side. Frontend restrictions are treated only as UX.
+
+## 8. Booking Concurrency
+
+## Booking Concurrency
+
+Concurrent booking is protected at the database level with a partial unique index:
 ```text
-                         Browser
-                            |
-                            v
-                    ┌───────────────┐
-                    │    Next.js    │
-                    │               │
-                    │ React UI      │
-                    │ Route Handlers│
-                    │ Auth          │
-                    │ Validation    │
-                    └───────┬───────┘
-                            |
-                            | DATABASE_URL
-                            v
-                    ┌───────────────┐
-                    │     Neon      │
-                    │  PostgreSQL   │
-                    └───────────────┘
-
-The frontend and backend are deployed together through Vercel.
-
-There is intentionally no separate Express service, message queue, cache, or microservice layer. The application's scope does not justify that complexity.
-
----
-
-## Project Structure
-
-```text
-app/
-├── api/
-│   ├── auth/
-│   ├── appointments/
-│   ├── health/
-│   └── slots/
-├── globals.css
-├── layout.tsx
-└── page.tsx
-
-src/
-├── db/
-│   ├── client.ts
-│   ├── migrations/
-│   └── schema/
-├── features/
-│   ├── appointments/
-│   ├── auth/
-│   └── slots/
-└── lib/
-    ├── api.ts
-    ├── auth/
-    └── errors/
-
-tests/
-├── integration/
-└── unit/
-
-docs/
-├── api.md
-├── architecture.md
-├── erd.md
-└── ux.md
+UNIQUE(slot_id) WHERE status = 'BOOKED'
 ```
+If two users attempt to book the same slot concurrently:
 
----
+* One request succeeds with `201`.
+* The other receives `409 SLOT_ALREADY_BOOKED`.
 
-# Data Model
+This prevents race conditions that cannot be reliably handled by frontend availability checks alone.
 
-The application uses three primary domain entities.
 
-### User
+## 9. UX & Design
 
-Stores authentication information and role.
+## UX & Design
 
-```text
-User
-├── id
-├── email
-├── password_hash
-├── role
-├── created_at
-└── updated_at
-```
+The interface focuses on clear feedback and minimal interaction cost.
 
-Roles:
+- Panel-based navigation for booking, appointments, and admin management
+- Loading and disabled states for asynchronous actions
+- Centered success/error notifications
+- Confirmation dialogs for destructive actions
+- Responsive mobile layout
+- Keyboard focus and reduced-motion support
 
-```text
-USER
-ADMIN
-```
+## 10. Engineering Trade-offs
 
-### Appointment Slot
+## Engineering Trade-offs
 
-Represents a time period that can be booked.
+### Database constraint over frontend-only checks
+Frontend availability checks improve UX, but PostgreSQL remains the source of truth for concurrent bookings.
 
-```text
-AppointmentSlot
-├── id
-├── start_time
-├── end_time
-├── created_by
-└── created_at
-```
+### Polling over WebSockets
+The dashboard refreshes after mutations, on visibility changes, and every 20 seconds. This provides adequate freshness without adding realtime infrastructure.
 
-### Appointment
+### Server-side sessions
+Sessions keep authentication state server-controlled and make authorization decisions independent of client state.
 
-Represents a user's booking.
+### Cancellation as a state change
+Appointments move from `BOOKED` to `CANCELLED` instead of being deleted, preserving history while freeing the slot.
 
-```text
-Appointment
-├── id
-├── slot_id
-├── user_id
-├── status
-├── created_at
-└── cancelled_at
-```
+### Simple architecture over over-engineering
+The project intentionally avoids unnecessary services such as Redis, WebSockets, queues, and microservices given the application's scope.
 
-Appointment status:
+## 11. Getting Started
 
-```text
-BOOKED
-CANCELLED
-```
+## Getting Started
 
-Cancellation is implemented as a state change rather than deleting the appointment. This preserves appointment history.
-
----
-
-# Preventing Double Booking
-
-Concurrent booking is one of the most important correctness requirements of the application.
-
-The database contains a partial unique index:
-
-```text
-appointments_one_active_booking_per_slot
-```
-
-Only appointments with:
-
-```text
-status = BOOKED
-```
-
-participate in the constraint.
-
-Conceptually:
-
-```text
-                    Appointment Slot
-                           |
-             ┌─────────────┴─────────────┐
-             |                           |
-        User A books                 User B books
-             |                           |
-             v                           v
-        BOOKED row                  BOOKED row
-             |                           |
-             └─────────────┬─────────────┘
-                           |
-                           v
-                  PostgreSQL constraint
-                           |
-                  only one succeeds
-```
-
-If a second booking reaches the database, PostgreSQL rejects it with a uniqueness violation.
-
-The API converts that database error into:
-
-```text
-HTTP 409 Conflict
-SLOT_ALREADY_BOOKED
-```
-
-This means the database—not the frontend—is the final authority for booking consistency.
-
----
-
-# Authentication & Authorization
-
-Authentication uses server-side sessions stored in PostgreSQL and an HTTP-only session cookie.
-
-Authorization is enforced on the server.
-
-### USER
-
-Can:
-
-* View available slots
-* Book slots
-* View their own appointments
-* Cancel their own appointments
-
-### ADMIN
-
-Can additionally:
-
-* Create appointment slots
-
-A client cannot bypass these restrictions simply by calling the API directly.
-
----
-
-# API
-
-| Method | Endpoint                       | Purpose                         |
-| ------ | ------------------------------ | ------------------------------- |
-| POST   | `/api/auth/register`           | Register a user                 |
-| POST   | `/api/auth/login`              | Sign in                         |
-| POST   | `/api/auth/logout`             | Sign out                        |
-| GET    | `/api/auth/me`                 | Get current user                |
-| GET    | `/api/slots`                   | Get available slots             |
-| POST   | `/api/slots`                   | Create a slot (ADMIN)           |
-| GET    | `/api/appointments`            | Get current user's appointments |
-| POST   | `/api/appointments`            | Book a slot                     |
-| PATCH  | `/api/appointments/:id/cancel` | Cancel an appointment           |
-| GET    | `/api/health`                  | Health check                    |
-
-Detailed API documentation is available in:
-
-```text
-docs/api.md
-```
-
----
-
-# Validation
-
-Input is validated on the server using Zod.
-
-Examples include:
-
-* Valid email format
-* Password length
-* UUID format
-* Appointment slot time ordering
-* Future slot requirements
-* Appointment ownership
-* Role authorization
-
-The frontend provides usability validation, but the backend remains authoritative.
-
----
-
-# UX
-
-The UI is intentionally minimal and focused on the primary booking journey.
-
-The application provides explicit states for:
-
-* Initial loading
-* Loading appointment data
-* Empty available-slot state
-* Empty appointment history
-* Booking in progress
-* Booking success
-* Booking conflict
-* Cancellation confirmation
-* Cancellation in progress
-* Cancellation success
-* Authentication errors
-* API errors
-
-The interface is responsive across desktop and mobile layouts.
-
-Detailed UX decisions are documented in:
-
-```text
-docs/ux.md
-```
-
----
-
-# Testing
-
-The project includes automated tests covering business rules and database booking consistency.
-
-Run all tests:
+Clone the repository and install dependencies:
 
 ```bash
-pnpm test
-```
-
-Run tests in watch mode:
-
-```bash
-pnpm test:watch
-```
-
-Run linting:
-
-```bash
-pnpm lint
-```
-
-Run TypeScript validation:
-
-```bash
-pnpm exec tsc --noEmit
-```
-
-Run the production build:
-
-```bash
-pnpm build
-```
-
-The integration suite verifies that the database prevents multiple active bookings for the same appointment slot.
-
----
-
-# Local Development
-
-## Requirements
-
-* Node.js 22+
-* pnpm
-* PostgreSQL-compatible database
-
-Neon can be used for local development.
-
-## Installation
-
-```bash
+git clone <repository-url>
+cd appointment-booking
 pnpm install
-```
+````
+
+
+## 12. Environment Variables
 
 ## Environment Variables
 
-Create a `.env` file:
+Create a `.env` file in the project root:
 
 ```env
-DATABASE_URL=your_postgresql_connection_string
-```
+DATABASE_URL="your-neon-database-url"
+````
 
-See `.env.example` for the required environment variables.
+Do not commit `.env` or any production secrets.
+
+A template is provided in `.env.example`.
+
+
+## 13. Database Setup
 
 ## Database Setup
 
-Generate migrations:
+Apply the Drizzle migrations:
 
 ```bash
-pnpm db:generate
-```
+pnpm drizzle-kit migrate
+````
 
-Apply migrations:
-
-```bash
-pnpm db:migrate
-```
-
-Seed development data:
+Seed the database:
 
 ```bash
-pnpm db:seed
+pnpm tsx scripts/seed.ts
 ```
 
-## Start Development Server
+
+
+## 14. Running Locally
+
+## Running Locally
+
+Start the development server:
 
 ```bash
 pnpm dev
-```
+````
 
-Then open:
+The application will be available at:
 
 ```text
 http://localhost:3000
 ```
 
----
+For a production build:
 
-# Demo Account
-
-The development seed creates an administrator account:
-
-```text
-Email: admin@example.com
-Password: Admin123!
-Role: ADMIN
+```bash
+pnpm build
+pnpm start
 ```
 
-This account is intended for local/demo evaluation.
 
-Production credentials should be changed before exposing an application publicly.
+## 15. Testing
 
----
+## Testing
 
-# Deployment
+Run the test suite:
 
-The production application uses:
+```bash
+pnpm test
+````
 
-```text
-Vercel
-   |
-   | DATABASE_URL
-   v
-Neon PostgreSQL
+Run the TypeScript check:
+
+```bash
+pnpm exec tsc --noEmit
 ```
 
-The Next.js application—including its API Route Handlers—is deployed to Vercel.
+Run ESLint:
 
-Required Vercel environment variable:
-
-```text
-DATABASE_URL
+```bash
+pnpm lint
 ```
 
-The database credentials are never committed to the repository.
+Build the application:
 
----
-
-# Production Verification
-
-The deployed application has been verified through the primary production journey:
-
-```text
-Register / Login
-       |
-       v
-View available slots
-       |
-       v
-Book appointment
-       |
-       v
-View upcoming appointment
-       |
-       v
-Cancel appointment
-       |
-       v
-View appointment history
+```bash
+pnpm build
 ```
 
-The administrator journey is:
+The test suite includes unit tests for appointment rules and an integration test for concurrent booking protection.
+
+## 16. Deployment
+
+## Deployment
+
+The application is deployed on Vercel with Neon PostgreSQL as the production database.
 
 ```text
-Admin Login
-     |
-     v
-Create appointment slot
-     |
-     v
-Slot becomes available
-     |
-     v
-User books slot
+Browser → Vercel → Next.js → Neon PostgreSQL
+````
+
+Set `DATABASE_URL` in the Vercel project environment variables before deployment.
+
+### Production build
+
+```bash
+pnpm build
 ```
 
----
 
-# Design Decisions
+## 17. API Documentation
 
-### Why Next.js Route Handlers?
+## API Documentation
 
-The application's backend requirements are small enough that a separate backend service would add unnecessary deployment and operational complexity.
+Detailed API routes, request formats, responses, authentication requirements, and error codes are documented in:
 
-Using Next.js Route Handlers keeps the frontend and backend in one deployable application while maintaining a clear API boundary.
+[API Documentation](./docs/api.md)
 
-### Why PostgreSQL?
+## 18. Project Structure
 
-Appointment booking requires strong consistency guarantees.
+## Project Structure
 
-PostgreSQL provides the relational constraints and transactional guarantees needed to protect the booking invariant.
+```text
+app/        # Next.js pages and API routes
+src/        # Features, database, authentication, and shared utilities
+tests/      # Unit and integration tests
+docs/       # Architecture, API, and ERD documentation
+public/     # Static diagrams and assets
+````
 
-### Why soft cancellation?
 
-Cancelled appointments remain available as historical records.
 
-This avoids losing useful information while allowing the underlying slot to become bookable again.
+## 20. License
 
-### Why database-level double-booking protection?
+## License
 
-Application-level checks alone are vulnerable to race conditions.
-
-The database constraint provides the final guarantee regardless of how many requests arrive concurrently.
-
----
-
-# Out of Scope
-
-The following features were deliberately excluded to keep the project focused:
-
-* Payments
-* Email/SMS notifications
-* Calendar integrations
-* Recurring appointments
-* Rescheduling
-* Waitlists
-* Multiple organizations
-* Multiple clinics
-* Multiple providers
-* Reviews
-* Analytics
-* Chat
-* Subscriptions
-* Complex scheduling rules
-* Microservices
-* Redis
-* Kafka
-* Kubernetes
-* Event-driven architecture
-
-The goal was to maximize quality within a small, realistic product scope rather than maximize feature count.
-
----
-
-# Development Philosophy
-
-The implementation follows several principles:
-
-1. Keep the product scope intentionally small.
-2. Treat the backend as the source of truth.
-3. Enforce critical invariants at the database level.
-4. Validate all external input on the server.
-5. Enforce authorization server-side.
-6. Provide explicit UI feedback for asynchronous operations.
-7. Prefer simple architecture over unnecessary infrastructure.
-8. Test critical business behavior.
-9. Keep production deployment straightforward.
-
----
-
-# License
-
-This project was created as a take-home assignment.
+This project was created as a software engineering assignment.
